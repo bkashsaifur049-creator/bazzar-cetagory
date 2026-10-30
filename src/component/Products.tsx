@@ -1,9 +1,8 @@
 
-
-import Link from "next/link";
+import ProductCard from "./ProductCard";
 
 type Product = {
-  id: number;
+  id: number | string;
   slug: string;
   nameBn: string;
   category: string;
@@ -13,10 +12,26 @@ type Product = {
   unit: string;
   today: number;
   yesterday?: number;
+  lastWeek?: number;
+  lastMonth?: number;
   change?: {
-    dir?: "up" | "down" | "flat";
+    dir?: "up" | "down" | "flat" | "same";
     pct?: number;
   };
+  markets?: {
+    market: string;
+    division: string;
+    min: number;
+    max: number;
+  }[];
+};
+
+type Category = {
+  id: string;
+  name: string;
+  icon: string;
+  count: number;
+  anchor: string;
 };
 
 const API_URL =
@@ -27,99 +42,155 @@ const banglaNumber = (value: number) =>
     maximumFractionDigits: 1,
   }).format(value);
 
-const unitLabel: Record<string, string> = {
-  kg: "প্রতি কেজি",
-  liter: "প্রতি লিটার",
-  litre: "প্রতি লিটার",
-  l: "প্রতি লিটার",
-  dozen: "প্রতি ডজন",
-  piece: "প্রতি পিস",
-  pcs: "প্রতি পিস",
-  piece: "প্রতি পিস",
-  gm: "প্রতি ১০০ গ্রাম",
-  g: "প্রতি গ্রাম",
-  packet: "প্রতি প্যাকেট",
-  bag: "প্রতি বস্তা",
-};
-
 function getChange(product: Product) {
-  if (product.change?.dir && product.change.pct != null) {
+  if (
+    product.change &&
+    typeof product.change.pct === "number"
+  ) {
     return {
-      dir: product.change.dir,
-      pct: product.change.pct,
+      dir: product.change.dir || "flat",
+      pct: Math.abs(product.change.pct),
     };
   }
 
-  if (product.yesterday != null && product.yesterday !== 0) {
-    const diff = ((product.today - product.yesterday) /
-      product.yesterday) * 100;
+  if (
+    typeof product.yesterday === "number" &&
+    product.yesterday !== 0
+  ) {
+    const difference =
+      ((product.today - product.yesterday) /
+        product.yesterday) *
+      100;
 
     return {
-      dir: diff > 0 ? "up" : diff < 0 ? "down" : "flat",
-      pct: Math.abs(diff),
+      dir:
+        difference > 0
+          ? "up"
+          : difference < 0
+            ? "down"
+            : "flat",
+      pct: Math.abs(difference),
     };
   }
 
   return { dir: "flat", pct: 0 };
 }
 
-function ProductCard({ product }: { product: Product }) {
-  const change = getChange(product);
+function extractProducts(result: unknown): Product[] {
+  let data: unknown = result;
 
-  const badgeStyle =
-    change.dir === "up"
-      ? "bg-green-100 text-green-700"
-      : change.dir === "down"
-        ? "bg-red-100 text-red-700"
-        : "bg-gray-100 text-gray-600";
+  for (let i = 0; i < 6; i++) {
+    if (Array.isArray(data)) {
+      return data.filter(
+        (item): item is Product =>
+          typeof item === "object" &&
+          item !== null &&
+          "id" in item &&
+          "slug" in item &&
+          "nameBn" in item &&
+          "category" in item &&
+          typeof item.today === "number"
+      );
+    }
 
-  const changeText =
-    change.dir === "up"
-      ? `▲ ${banglaNumber(change.pct)}%`
-      : change.dir === "down"
-        ? `▼ ${banglaNumber(change.pct)}%`
-        : `— ${banglaNumber(0)}%`;
+    if (!data || typeof data !== "object") {
+      return [];
+    }
+
+    const object = data as Record<string, unknown>;
+
+    if (Array.isArray(object.products)) {
+      data = object.products;
+      continue;
+    }
+
+    if ("data" in object) {
+      data = object.data;
+      continue;
+    }
+
+    if ("products" in object) {
+      data = object.products;
+      continue;
+    }
+
+    return [];
+  }
+
+  return [];
+}
+
+/* একই Products API থেকে Category তৈরি */
+function makeCategories(products: Product[]): Category[] {
+  const groups = new Map<string, Product[]>();
+
+  for (const product of products) {
+    const id = product.category?.trim();
+    if (!id) continue;
+
+    const items = groups.get(id) || [];
+    items.push(product);
+    groups.set(id, items);
+  }
+
+  return Array.from(groups.entries()).map(([id, items]) => ({
+    id,
+    name: items[0]?.categoryNameBn?.trim() || id,
+    icon: items[0]?.categoryIcon || items[0]?.image || "🛒",
+    count: items.length,
+    anchor: `category-${id}`,
+  }));
+}
+
+function CategorySection({
+  categories,
+}: {
+  categories: Category[];
+}) {
+  if (!categories.length) return null;
 
   return (
-    <Link
-      href={`/products/${product.id}`}
-      className="group flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-1 hover:border-green-200 hover:shadow-lg sm:p-5"
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-green-50 text-4xl transition group-hover:bg-green-100">
-          {product.image || product.categoryIcon || "🛒"}
-        </div>
+    <section className="mb-12">
+      <div className="mb-5">
+        <h2 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">
+          পণ্য অনুযায়ী ক্যাটাগরি
+        </h2>
 
-        <span
-          className={`rounded-full px-2.5 py-1 text-xs font-bold ${badgeStyle}`}
-        >
-          {changeText}
-        </span>
+        <p className="mt-2 text-sm text-gray-500 sm:text-base">
+          আপনার প্রয়োজনীয় পণ্য সহজেই খুঁজে নিন
+        </p>
       </div>
 
-      <h3 className="mt-4 line-clamp-2 min-h-12 font-bold leading-6 text-gray-800 group-hover:text-green-700">
-        {product.nameBn}
-      </h3>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4 xl:grid-cols-5">
+        {categories.map((category) => (
+          <a
+            key={category.id}
+            href={`#${category.anchor}`}
+            className="group rounded-2xl border border-gray-100 bg-white p-4 shadow-sm transition hover:-translate-y-1 hover:border-green-200 hover:shadow-lg"
+          >
+            <div className="flex h-24 items-center justify-center rounded-xl bg-green-50">
+              <span className="text-5xl" role="img" aria-label={category.name}>
+                {category.icon}
+              </span>
+            </div>
 
-      <p className="mt-1 text-sm text-gray-500">
-        {unitLabel[product.unit?.toLowerCase()] ||
-          `প্রতি ${product.unit || "ইউনিট"}`}
-      </p>
+            <div className="pt-3">
+              <h3 className="font-bold text-gray-900">
+                {category.name}
+              </h3>
 
-      <div className="mt-auto flex items-end justify-between gap-2 pt-5">
-        <div>
-          <p className="text-xs text-gray-500">আজকের দাম</p>
-          <p className="mt-1 text-xl font-extrabold text-gray-900">
-            {banglaNumber(product.today)}
-            <span className="ml-1 text-sm font-semibold">টাকা</span>
-          </p>
-        </div>
+              <p className="mt-1 text-xs text-gray-500">
+                {banglaNumber(category.count)}টি পণ্য
+              </p>
 
-        <span className="mb-1 text-lg text-green-600 transition group-hover:translate-x-1">
-          →
-        </span>
+              <p className="mt-2 text-xs font-semibold text-green-700">
+                পণ্য দেখুন →
+              </p>
+            </div>
+          </a>
+        ))}
       </div>
-    </Link>
+    </section>
   );
 }
 
@@ -127,20 +198,21 @@ function ProductSection({
   title,
   subtitle,
   products,
-  type,
+  anchor,
 }: {
   title: string;
   subtitle: string;
   products: Product[];
-  type?: "up" | "down";
+  anchor?: string;
 }) {
   return (
-    <section className="mb-12">
+    <section id={anchor} className="mb-12 scroll-mt-24">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-extrabold text-gray-900 sm:text-3xl">
             {title}
           </h2>
+
           <p className="mt-2 text-sm text-gray-500 sm:text-base">
             {subtitle}
           </p>
@@ -152,16 +224,14 @@ function ProductSection({
       </div>
 
       {products.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:gap-5 md:grid-cols-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-5 lg:grid-cols-4">
           {products.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}
         </div>
       ) : (
         <p className="rounded-xl bg-gray-50 p-5 text-gray-500">
-          {type
-            ? "এই মুহূর্তে এই তালিকার পণ্য পাওয়া যায়নি।"
-            : "কোনো পণ্য পাওয়া যায়নি।"}
+          এই তালিকায় কোনো পণ্য পাওয়া যায়নি।
         </p>
       )}
     </section>
@@ -170,6 +240,7 @@ function ProductSection({
 
 export default async function Products() {
   let products: Product[] = [];
+  let apiError = false;
 
   try {
     const response = await fetch(API_URL, {
@@ -177,64 +248,93 @@ export default async function Products() {
     });
 
     if (!response.ok) {
-      throw new Error("পণ্যের তথ্য আনা যায়নি");
+      throw new Error(`API error: ${response.status}`);
     }
 
-    const result = await response.json();
-
-    const list = Array.isArray(result)
-      ? result
-      : Array.isArray(result.data)
-        ? result.data
-        : Array.isArray(result.products)
-          ? result.products
-          : [];
-
-    products = list.filter(
-      (item: Product) =>
-        item.id != null &&
-        item.nameBn &&
-        typeof item.today === "number"
-    );
+    const result: unknown = await response.json();
+    products = extractProducts(result);
   } catch (error) {
-    console.error("BazarDor API error:", error);
+    console.error("BazarDor Products API error:", error);
+    apiError = true;
   }
 
-  const getPercent = (product: Product) => getChange(product);
+  const categories = makeCategories(products);
 
-  const risers = [...products]
-    .filter((p) => getPercent(p).dir === "up")
-    .sort((a, b) => getPercent(b).pct - getPercent(a).pct)
+  const risers = products
+    .filter((product) => getChange(product).dir === "up")
+    .sort((a, b) => getChange(b).pct - getChange(a).pct)
     .slice(0, 6);
 
-  const fallers = [...products]
-    .filter((p) => getPercent(p).dir === "down")
-    .sort((a, b) => getPercent(a).pct - getPercent(b).pct)
+  const fallers = products
+    .filter((product) => getChange(product).dir === "down")
+    .sort((a, b) => getChange(b).pct - getChange(a).pct)
     .slice(0, 6);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
-      <ProductSection
-        title="আজ দাম বেড়েছে ▲"
-        subtitle="যেসব পণ্যের দাম গতকালের তুলনায় বেড়েছে"
-        products={risers}
-        type="up"
-      />
+    <main className="mx-auto min-h-screen max-w-7xl px-4 py-8 sm:px-6 sm:py-12 lg:px-8">
+      {apiError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+          <h2 className="font-bold text-red-800">
+            পণ্যের তথ্য লোড করা যায়নি
+          </h2>
 
-      <ProductSection
-        title="আজ দাম কমেছে ▼"
-        subtitle="যেসব পণ্যের দাম গতকালের তুলনায় কমেছে"
-        products={fallers}
-        type="down"
-      />
+          <p className="mt-2 text-sm text-gray-600">
+            API URL, ইন্টারনেট সংযোগ এবং Terminal-এর error পরীক্ষা করো।
+          </p>
+        </div>
+      ) : products.length === 0 ? (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
+          <h2 className="font-bold text-gray-900">
+            পণ্যের তথ্য পাওয়া যাচ্ছে না
+          </h2>
 
-      <section id="সব-পণ্য" className="scroll-mt-24">
-        <ProductSection
-          title="সব পণ্য"
-          subtitle="নিত্যপ্রয়োজনীয় পণ্যের বাজারদর এক নজরে দেখুন"
-          products={products}
-        />
-      </section>
-    </div>
+          <p className="mt-2 text-sm text-gray-600">
+            API response-এর structure পরীক্ষা করো।
+          </p>
+        </div>
+      ) : (
+        <>
+          <CategorySection categories={categories} />
+
+          {categories.map((category) => {
+            const categoryProducts = products.filter(
+              (product) => product.category?.trim() === category.id
+            );
+
+            return (
+              <ProductSection
+                key={category.id}
+                title={`${category.icon} ${category.name}`}
+                subtitle={`${category.name} বিভাগের বাজারদর`}
+                products={categoryProducts}
+                anchor={category.anchor}
+              />
+            );
+          })}
+
+          <ProductSection
+            title="আজ দাম বেড়েছে ▲"
+            subtitle="গতকালের তুলনায় যেসব পণ্যের দাম বেড়েছে"
+            products={risers}
+          />
+
+          <ProductSection
+            title="আজ দাম কমেছে ▼"
+            subtitle="গতকালের তুলনায় যেসব পণ্যের দাম কমেছে"
+            products={fallers}
+          />
+
+          <ProductSection
+            title="সব পণ্য"
+            subtitle="নিত্যপ্রয়োজনীয় পণ্যের বাজারদর এক নজরে দেখুন"
+            products={products}
+            anchor="all-products"
+          />
+        </>
+      )}
+    </main>
   );
 }
+
+
+

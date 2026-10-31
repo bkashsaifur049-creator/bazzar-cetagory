@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import Navbar from "../component/Navber";
-import PriceTicker from "../component/PriceTicker";
+import Navbar from "../components/layout/Navber";
 
 export const metadata: Metadata = {
   title: "বাজার দর | বাংলাদেশের দৈনিক বাজারদর",
@@ -16,8 +15,7 @@ export default function RootLayout({
   return (
     <html lang="bn">
       <body>
-        <Navbar/>
-        <PriceTicker/>
+      <Navbar/>
         
         <main>{children}</main>
       </body>

@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import LogoutButton from "../auth/LogoutButton";
 
 const categories = [
   { name: "সব পণ্য", slug: "" },
@@ -43,12 +44,10 @@ export default function Navbar({ user = null }: NavbarProps) {
       {/* First Row: Logo, Date and Authentication */}
       <div className="border-b border-[#e8eee9]">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
-
           {/* Logo and Bangla Date */}
           <Link href="/" className="group">
             <div className="flex items-center gap-2">
               <span className="text-3xl">🛒</span>
-
               <h1 className="text-2xl font-extrabold tracking-tight text-[#168044]">
                 বাজার দর
               </h1>
@@ -73,18 +72,20 @@ export default function Navbar({ user = null }: NavbarProps) {
                 <span className="hidden rounded-lg bg-[#edf7ef] px-3 py-2 text-sm font-semibold text-[#168044] sm:inline-block">
                   লগইন করা আছে
                 </span>
+
+                <LogoutButton />
               </>
             ) : (
               <>
                 <Link
-                  href="/sign-in"
+                  href="/signin"
                   className="rounded-lg px-3 py-2 text-sm font-semibold text-[#168044] transition hover:bg-[#edf7ef]"
                 >
                   সাইন ইন
                 </Link>
 
                 <Link
-                  href="/sign-up"
+                  href="/signup"
                   className="rounded-lg bg-[#168044] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#116b38]"
                 >
                   সাইন আপ
@@ -110,18 +111,17 @@ export default function Navbar({ user = null }: NavbarProps) {
               category.slug === ""
                 ? pathname === "/"
                 : pathname === href ||
-                  pathname.startsWith(`${href}/`);
+                pathname.startsWith(`${href}/`);
 
             return (
               <Link
                 key={category.slug || "all"}
                 href={href}
                 aria-current={isActive ? "page" : undefined}
-                className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                  isActive
+                className={`shrink-0 rounded-lg px-4 py-2 text-sm font-semibold transition ${isActive
                     ? "bg-[#168044] text-white shadow-sm"
                     : "text-[#344239] hover:bg-[#edf7ef] hover:text-[#168044]"
-                }`}
+                  }`}
               >
                 {category.name}
               </Link>
